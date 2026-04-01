@@ -1,0 +1,45 @@
+# --- ÉTAPE 1 : Build & Tests ---
+FROM node:20-slim AS builder
+
+# Définition du répertoire de travail pour la compilation
+WORKDIR /build
+
+# Copie des fichiers de dépendances pour profiter du cache Docker
+COPY package*.json ./
+
+# Installation de toutes les dépendances (y compris devDependencies pour les tests)
+RUN npm install
+
+# Copie de tout le contenu du dossier backend (server.js, dossier test, etc.)
+COPY . .
+
+# Exécution des tests unitaires
+RUN npm test
+
+# --- ÉTAPE 2 : Production ---
+FROM node:20-alpine AS runner
+
+# Définition de l'environnement en production
+ENV NODE_ENV=production
+
+# Répertoire de travail final
+WORKDIR /app
+
+# Copie des fichiers de dépendances
+COPY package*.json ./
+
+# Installation uniquement des dépendances de production (plus léger)
+RUN npm install --omit=dev
+
+# Récupération des fichiers nécessaires depuis l'étape "builder"
+# On copie tout le contenu du dossier /build vers le dossier courant /app
+COPY --from=builder /build/ .
+
+# Utilisation d'un utilisateur non-root pour la sécurité
+USER node
+
+# Port exposé par l'application
+EXPOSE 3000
+
+# Lancement du serveur
+CMD ["node", "server.js"]
