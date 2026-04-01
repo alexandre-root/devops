@@ -1,0 +1,19 @@
+# --- ÉTAPE 1 : Build (Optionnelle si pas de framework, mais propre pour la structure) ---
+FROM alpine AS builder
+WORKDIR /build
+# Copie du fichier HTML (et autres assets si présents)
+COPY index.html .
+
+# --- ÉTAPE 2 : Serveur Nginx ---
+FROM nginx:alpine
+
+# Copie de la configuration Nginx personnalisée
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copie des fichiers statiques vers le répertoire par défaut de Nginx
+COPY --from=builder /build/index.html /usr/share/nginx/html/index.html
+
+# Exposer le port 80
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
