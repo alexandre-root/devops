@@ -6,7 +6,7 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/health", (req, res) => {
-    res.json({ status: "add-endpoint", timestamp: new Date() });
+    res.json({ status: "update-health", timestamp: new Date() });
 });
 
 app.get("/api/activities", (req, res) => {
