@@ -88,7 +88,7 @@ jobs:
           # On boucle jusqu'à ce que le HTTP 200 soit reçu ou timeout de 30s
           attempt_counter=0
           max_attempts=10
-          until $(curl --output /dev/null --silent --head --fail http://localhost:3000/api/health); do
+          until $(curl --output /dev/null --silent --head --fail http://localhost:3000/health); do
             if [ ${attempt_counter} -eq ${max_attempts} ];then
               echo "ERREUR : Le Health Check a échoué après plusieurs tentatives."
               exit 1
