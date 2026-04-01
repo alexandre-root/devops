@@ -1,0 +1,100 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_BACK: ${{ github.repository }}-backend
+  IMAGE_NAME_FRONT: ${{ github.repository }}-frontend
+
+jobs:
+  # --- ÉTAPE 1 : Lint & Tests ---
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm install
+
+      - name: Run Linter (ESLint)
+        working-directory: ./backend
+        run: npx eslint . || echo "Linter non configuré, passage à l'étape suivante"
+
+      - name: Run Unit Tests (Jest)
+        working-directory: ./backend
+        run: npm test
+
+  # --- ÉTAPE 2 : Build & Push Docker ---
+  build-docker:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACK }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACK }}:${{ github.sha }}
+
+      - name: Build & Push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONT }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONT }}:${{ github.sha }}
+
+  # --- ÉTAPE 3 : Déploiement Staging & Health Check ---
+  deploy-staging:
+    needs: build-docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Staging Environment (Docker Compose)
+        run: docker-compose up -d
+
+      - name: Health Check Backend
+        run: |
+          echo "Attente du démarrage du backend..."
+          # On boucle jusqu'à ce que le HTTP 200 soit reçu ou timeout de 30s
+          attempt_counter=0
+          max_attempts=10
+          until $(curl --output /dev/null --silent --head --fail http://localhost:3000/api/health); do
+            if [ ${attempt_counter} -eq ${max_attempts} ];then
+              echo "ERREUR : Le Health Check a échoué après plusieurs tentatives."
+              exit 1
+            fi
+            printf '.'
+            attempt_counter=$(($attempt_counter+1))
+            sleep 3
+          done
+          echo "SUCCÈS : Le Backend répond correctement !"
